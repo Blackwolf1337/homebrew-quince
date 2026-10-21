@@ -18,4 +18,10 @@ jobs:
       - name: Install
         run: brew install --build-from-source --verbose blackwolf1337/quince/quince
       - name: Test
-        run: brew test blackwolf1337/quince/quince
+        run: |
+          set -o pipefail
+          brew test --verbose blackwolf1337/quince/quince 2>&1 | tee test.log
+      - name: Test output as annotations
+        # job logs need a GitHub login, annotations do not
+        if: failure()
+        run: tail -40 test.log | sed 's/%/%25/g; s/^/::error::/' || true
