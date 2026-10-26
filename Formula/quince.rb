@@ -1,8 +1,8 @@
 class Quince < Formula
-  desc "Native YouTube Music player (Qt Quick, libmpv)"
+  desc "Native YouTube Music player (Slint, libmpv)"
   homepage "https://github.com/Blackwolf1337/quince"
-  url "https://github.com/Blackwolf1337/quince/archive/refs/tags/v0.1.1.tar.gz"
-  sha256 "5bf2bcc9ac48939d56a2b33f9c8ca473e42010c9501521282441b50a40763ccc"
+  url "https://github.com/Blackwolf1337/quince/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "521e448ed4fff0f35decf13c0d47a5221112b27e57ce714a98150c8c1eaaa336"
   # Quince; MeCab (BSD option); QuickJS-ng; the IPADIC dictionary has its own terms
   license all_of: ["GPL-3.0-or-later", "BSD-3-Clause", "MIT"]
   head "https://github.com/Blackwolf1337/quince.git", branch: "master"
@@ -10,13 +10,14 @@ class Quince < Formula
   depends_on "cmake" => :build
   depends_on "ninja" => :build
   depends_on "pkgconf" => :build
+  depends_on "rust" => :build
   depends_on "ffmpeg"
   depends_on "icu4c"
   depends_on :macos
   depends_on "mpv"
   depends_on "qt"
 
-  # what CMake would download, handed in so the build needs no network
+  # what CMake would download, handed in (cargo still fetches Slint's crates)
   resource "mecab" do
     url "https://github.com/shogo82148/mecab/releases/download/v0.996.13/mecab-0.996.13.tar.gz"
     sha256 "3da28541062d6d1cfbb92ab09481779f2ad735c89705d981eb66f072ef776538"
@@ -32,13 +33,36 @@ class Quince < Formula
     sha256 "559bc4c420475e55c7ab4510adbc562f55d7524d75e8e89d79ce4bb02f5687d9"
   end
 
+  resource "slint" do
+    url "https://github.com/slint-ui/slint/archive/refs/tags/v1.18.1.tar.gz"
+    sha256 "fe485305ed303215e76c04918ee9aefbffbe229f18f979098ec36c7fa1dab28b"
+  end
+
+  # Slint's CMake glue for cargo
+  resource "corrosion" do
+    url "https://github.com/corrosion-rs/corrosion/archive/refs/tags/v0.6.1.tar.gz"
+    sha256 "e9e95b1ee2bad52681f347993fb1a5af5cce458c5ce8a2636c9e476e4babf8e3"
+  end
+
+  resource "nfd" do
+    url "https://github.com/btzy/nativefiledialog-extended/archive/refs/tags/v1.4.1.tar.gz"
+    sha256 "4a01eafa921169f009f3e83bea8e287d9e5d0b94ca9064cf7f0a546652d7c884"
+  end
+
   def install
-    %w[mecab mecab-ipadic quickjs].each { |name| (buildpath/"deps"/name).install resource(name) }
+    %w[mecab mecab-ipadic quickjs slint corrosion nfd].each { |name| (buildpath/"deps"/name).install resource(name) }
+    # Quince's changes to Slint: FetchContent applies them only to a Slint it downloads itself
+    cd buildpath/"deps/slint" do
+      system "cmake", "-P", buildpath/"cmake/SlintPatch.cmake"
+    end
     args = %W[
       -DFETCHCONTENT_FULLY_DISCONNECTED=ON
       -DFETCHCONTENT_SOURCE_DIR_MECAB=#{buildpath}/deps/mecab
       -DFETCHCONTENT_SOURCE_DIR_MECAB_IPADIC=#{buildpath}/deps/mecab-ipadic
       -DFETCHCONTENT_SOURCE_DIR_QUICKJS=#{buildpath}/deps/quickjs
+      -DFETCHCONTENT_SOURCE_DIR_SLINT=#{buildpath}/deps/slint
+      -DFETCHCONTENT_SOURCE_DIR_CORROSION=#{buildpath}/deps/corrosion
+      -DFETCHCONTENT_SOURCE_DIR_NFD=#{buildpath}/deps/nfd
     ]
     system "cmake", "-S", ".", "-B", "build", "-G", "Ninja", *args, *std_cmake_args
     system "cmake", "--build", "build"
@@ -62,8 +86,6 @@ class Quince < Formula
   end
 
   test do
-    with_env(QT_QPA_PLATFORM: "offscreen") do
-      assert_match version.to_s, shell_output("#{bin}/quince --version")
-    end
+    assert_match version.to_s, shell_output("#{bin}/quince --version")
   end
 end
